@@ -1,0 +1,6 @@
+Mathematica notebooks
+
+doppler_mengbenzion.nb           - Meng and Ben-Zion (2018) equations
+doppler_forward.nb               - forward model equations
+doppler_est.nb                   - steps to estimate doppler parameters
+doppler_partial_derivatives.nb   - partial derivatives of forward model
