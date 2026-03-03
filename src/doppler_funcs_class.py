@@ -26,8 +26,7 @@ class DopplerInversion:
 		self.source_speed = None
 		self.source_frequencies = None
 		
-		if self.method == 'full':
-			self.num_overtones = len(self.mprior[4:])
+		self.num_overtones = len(self.mprior[4:])
 
 	def cprior_setup(self):
 		f0_sigma = self.prior_sigma[0]
@@ -37,45 +36,25 @@ class DopplerInversion:
 		c_sigma = self.prior_sigma[4]
 
 		cprior0 = np.zeros((len(self.mprior), len(self.mprior)))
-		if self.method != 'full':
-			cprior0[0][0] = f0_sigma ** 2
-			cprior0[1][1] = v0_sigma ** 2
-			cprior0[2][2] = l_sigma ** 2
-			cprior0[3][3] = t0_sigma ** 2
-			cprior0[4][4] = c_sigma ** 2
+	
+		cprior0[0][0] = v0_sigma**2
+		cprior0[1][1] = l_sigma**2
+		cprior0[2][2] = t0_sigma**2
+		cprior0[3][3] = c_sigma**2
 
-			if self.off_diagonal:
-				cprior0[0][3] = -0.4 * f0_sigma * t0_sigma
-				cprior0[1][2] = -0.7 * v0_sigma * l_sigma
-				cprior0[1][4] = 0.85 * v0_sigma * c_sigma
-				cprior0[2][1] = -0.7 * v0_sigma * l_sigma
-				cprior0[2][4] = -0.7 * l_sigma * c_sigma
-				cprior0[3][0] = -0.4 * f0_sigma * t0_sigma
-				cprior0[4][1] = 0.85 * v0_sigma * c_sigma
-				cprior0[4][2] = -0.7 * l_sigma * c_sigma
+		for row in range(len(cprior0)):
+			if row >= 4:
+				cprior0[row][row] = f0_sigma**2
 
-		else:
-			for row in range(len(cprior0)):
-				if row == 0:
-					cprior0[row][row] = v0_sigma**2
-				elif row == 1:
-					cprior0[row][row] = l_sigma**2
-				elif row == 2:
-					cprior0[row][row] = t0_sigma**2
-				elif row == 3:
-					cprior0[row][row] = c_sigma**2
-				else:
-					cprior0[row][row] = f0_sigma**2
-
-			if self.off_diagonal:
-				cprior0[4:][2] =  -0.4 * f0_sigma * t0_sigma
-				cprior0[0][1] = -0.7 * v0_sigma * l_sigma
-				cprior0[0][3] = 0.85 * v0_sigma * c_sigma
-				cprior0[1][0] = -0.7 * v0_sigma * l_sigma
-				cprior0[1][3] = -0.7 * l_sigma * c_sigma
-				cprior0[2][4:] =  -0.4 * f0_sigma * t0_sigma
-				cprior0[3][0] = 0.85 * v0_sigma * c_sigma
-				cprior0[3][1] = -0.7 * l_sigma * c_sigma
+		if self.off_diagonal:
+			cprior0[4:][2] =  -0.4 * f0_sigma * t0_sigma
+			cprior0[0][1] = -0.7 * v0_sigma * l_sigma
+			cprior0[0][3] = 0.85 * v0_sigma * c_sigma
+			cprior0[1][0] = -0.7 * v0_sigma * l_sigma
+			cprior0[1][3] = -0.7 * l_sigma * c_sigma
+			cprior0[2][4:] =  -0.4 * f0_sigma * t0_sigma
+			cprior0[3][0] = 0.85 * v0_sigma * c_sigma
+			cprior0[3][1] = -0.7 * l_sigma * c_sigma
 
 		cprior = cprior0 * (len(self.mprior))
 
@@ -208,114 +187,7 @@ class DopplerInversion:
 		print("Total Misfit:", S)
 		return Sd
 
-	def invert_f(self, sigma=10):
-		"""
-		Inverts the function f using the given initial parameters and data array.
-
-		Args:
-			mprior (numpy.ndarray): Initial parameters for the function, 
-			f[0] = f0, f[1] = v0, f[2] = l, f[3] = t0, f[4] = c.
-			prior_sigma (list): List of standard deviations for the prior 
-			parameters prior_sigma[0] = f0_sigma, prior_sigma[1] = v0_sigma, 
-			prior_sigma[2] = l_sigma, prior_sigma[3] = t0_sigma,
-			prior_sigma[4] = c_sigma.
-			coords_array (numpy.ndarray): Data picks along overtone doppler 
-			curve.
-			num_iterations (int): Number of iterations to perform.
-			sigma (float): Standard deviation for the data picks, default is 10.
-			off_diagonal (bool): Whether to include off-diagonal elements in the
-			  prior covariance matrix, default is False.
-
-		Returns:
-			numpy.ndarray: The inverted parameters for the function f.
-			numpy.ndarray: The covariance matrix of the posterior parameters.
-			numpy.ndarray: The normalized covariance matrix of the posterior 
-			parameters.
-			float: The data misfit value.
-		"""
-
-		cprior0, cprior, Cd0, Cd, mnew = self.cprior_setup()
-		self.cprior = cprior
-		self.sigma = sigma
-		n = 0
 	
-		while n < self.num_iterations:
-			if np.any(np.isnan(mnew)) and n == 0:
-				return self.mprior, cprior0, cprior, 'Forward Model'
-			elif np.any(np.isnan(mnew)):
-				mnew = m
-				G = G_hold
-				Cpost = la.inv(G.T @ la.pinv(Cd) @ G + la.inv(cprior))
-				Cpost0 = la.inv(G.T @ la.pinv(Cd0) @ G + la.inv(cprior0))
-				return mnew, Cpost0, Cpost, self.data_misfit()
-
-			else:
-				m = mnew
-			f0 = m[0] #must move f0 = m[4] to match full inversion
-			v0 = m[1]
-			l = m[2]
-			t0 = m[3]
-			c = m[4]
-			self.source_frequencies = f0
-			self.source_speed = v0
-			self.closest_approach_dist = l
-			self.source_closest_approach = t0
-			self.sound_speed = c
-
-			fpred = []
-			G = np.zeros((len(self.fobs), 5))
-
-			for i in range(0, len(self.tobs)):
-				tprime = self.tobs[i]
-				t = ((tprime - t0) - np.sqrt((tprime - t0)**2 - (1 - v0**2 
-					/ c**2) * ((tprime - t0)**2 - l**2 / c**2))) / (1 - v0**2 
-					/ c**2)
-				ft0p = f0 / (1 + (v0 / c) * (v0 * t) / (np.sqrt(l**2 + 
-						(v0 * t)**2)))
-				f_derivef0, f_derivev0, f_derivel, f_derivet0, f_derivec \
-				= self.df(tprime)
-				
-				G[i, 0:5] = [f_derivef0, f_derivev0, f_derivel, f_derivet0, 
-				 			f_derivec]
-				fpred.append(ft0p)
-			Gm = G
-
-			gamma = (cprior @ Gm.T @ la.inv(Cd) @ (np.array(fpred) - self.fobs) 
-					+ (np.array(m) - np.array(self.mprior)))
-			H = (np.identity(len(mnew)) + cprior @ Gm.T @ la.inv(Cd) @ Gm)
-			dm = -la.inv(H) @ gamma
-			mnew = m + dm
-
-			unreasonable = (
-				mnew[0] <= 5 or mnew[0] > 375 or
-				mnew[1] <= 0 or mnew[1] > 350 or
-				mnew[1] >= mnew[4] or
-				mnew[2] < 0 or mnew[2] > 1e5 or
-				mnew[3] < 10 or mnew[3] > 240 or
-				mnew[4] < 200 or mnew[4] > 400
-			)
-			if unreasonable and n > 0:
-				mnew = m
-				G = G_hold
-				Cpost = la.inv(G.T @ la.pinv(Cd) @ G + la.inv(cprior))
-				Cpost0 = la.inv(G.T @ la.pinv(Cd0) @ G + la.inv(cprior0))
-				return mnew, Cpost0, Cpost, self.data_misfit()
-			elif unreasonable and n == 0:
-				return self.mprior, cprior0, cprior, 'Forward Model'
-			elif np.nan in mnew:
-				return self.mprior, cprior0, cprior, 'Forward Model'
-			else:
-				G_hold = G.copy()
-				n += 1
-			print(mnew)
-		self.mnew = mnew
-		self.fpred = fpred
-
-		Cpost = la.inv(G.T @ la.pinv(Cd) @ G + la.inv(cprior))
-		Cpost0 = la.inv(G.T @ la.pinv(Cd0) @ G + la.inv(cprior0))
-		F_m = self.data_misfit()
-
-		return mnew, Cpost0, Cpost, F_m
 
 
 	def full_inversion(self, peaks_assos, sigma=3):
@@ -447,12 +319,13 @@ class DopplerInversion:
 
 		Cpost = la.inv(Gm.T @ la.inv(Cd) @ Gm + la.inv(cprior))
 		Cpost0 = la.inv(Gm.T @ la.inv(Cd0) @ Gm + la.inv(cprior0))
-		F_m = self.data_misfif()
+		F_m = self.data_misfit()
 
 		return mnew, Cpost0, Cpost, mnew[4:], F_m
 	
 	def main(self):
 		if self.method == 'full':
-			return self.full_inversion()
+			return self.full_inversion(self.peaks_assos, 3)
 		else:
-			return self.invert_f()
+			self.peaks_assos = [1] * self.num_overtones
+			return self.full_inversion(self.peaks_assos, 10)
